@@ -5,10 +5,13 @@ import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { initDb, getDb } from './lib/db.mjs';
 import { handleRequest } from './lib/routes.mjs';
+import { createMcpHttpHandler } from './lib/mcp-http.mjs';
+import { getAccessToken, handleAuthRoute, isAuthorized, rejectUnauthorized } from './lib/auth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = parseInt(process.env.COREAD_PORT || '3000');
+const PORT = parseInt(process.env.PORT || process.env.COREAD_PORT || '3000');
 const DB_PATH = process.env.COREAD_DB || path.join(process.cwd(), 'data', 'coread.db');
+const handleMcpHttp = createMcpHttpHandler();
 
 // Optional comment notifier: run an arbitrary command whenever someone comments.
 // COREAD_NOTIFY_CMD  — shell command to execute (comment details passed via env vars)
@@ -48,6 +51,29 @@ const MIME = {
 };
 
 const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (url.pathname === '/healthz') {
+    try {
+      const db = getDb(true); db.prepare('SELECT 1').get(); db.close();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: true, service: 'coread' }));
+    } catch {
+      res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ ok: false }));
+    }
+    return;
+  }
+
+  if (await handleAuthRoute(req, res, url)) return;
+  if (rejectUnauthorized(req, res, url)) return;
+
+  // A browser authenticated by the deployment token is the room owner too.
+  if (getAccessToken() && isAuthorized(req) && process.env.ROOM_OWNER_KEY && !req.headers['x-owner-key']) {
+    req.headers['x-owner-key'] = process.env.ROOM_OWNER_KEY;
+  }
+
+  if (await handleMcpHttp(req, res, url)) return;
   const handled = await handleRequest(req, res, { port: PORT, onComment: notifyComment });
   if (handled) return;
 
@@ -76,5 +102,15 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, process.env.COREAD_HOST || '0.0.0.0', () => {
   console.log(`\n  📚 coread server running at http://localhost:${PORT}`);
   console.log(`  📂 Database: ${DB_PATH}`);
+  console.log(`  🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
+  console.log(`  🔐 Access token: ${getAccessToken() ? 'enabled' : 'disabled (local/trusted networks only)'}`);
   console.log(`  🌐 Open http://localhost:${PORT} in your browser\n`);
 });
+
+function shutdown(signal) {
+  console.log(`\n  ${signal} received, shutting down coread`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

@@ -46,6 +46,31 @@ npm start       # 启动服务器
 >
 > 前端默认按根路径打包。要挂在子路径下（比如 `https://example.com/coread/`），用 `npx vite build --base=/coread/` 构建。
 
+## Zeabur 单服务部署（手机可完成）
+
+这个 fork 已把网页与远程 MCP 合并到同一个进程、同一个域名，并内置登录保护。Zeabur 会自动识别根目录的 `Dockerfile`。
+
+1. 从 GitHub 仓库创建一个服务，选择 `main` 分支。
+2. 给服务挂载持久卷，挂载路径填写 `/data`。
+3. 为端口 `8080` 生成一个公网域名。
+4. 在服务环境变量中设置：
+
+| 变量 | 建议值 | 用途 |
+|------|--------|------|
+| `COREAD_ACCESS_TOKEN` | 一段至少 24 位的随机字符串 | 网页登录钥匙，也是 MCP Bearer Token |
+| `ROOM_OWNER_KEY` | 另一段随机字符串 | 共读室关门锁的开门钥匙 |
+| `COREAD_DB` | `/data/coread.db` | 持久化数据库 |
+| `ROOM_LOCK_PATH` | `/data/reading-room-lock.json` | 持久化门锁状态 |
+
+部署完成后：
+
+- 网页：打开 `https://你的域名/`，输入 `COREAD_ACCESS_TOKEN`；登录 Cookie 有效期 30 天。
+- MCP：连接 `https://你的域名/mcp`，认证方式选 Bearer Token，填写同一个 `COREAD_ACCESS_TOKEN`。
+- 兼容旧客户端的 SSE 地址仍是 `https://你的域名/sse`。
+- 健康检查地址是 `https://你的域名/healthz`，无需登录，但只返回服务是否正常。
+
+不要为 MCP 再建第二个 Zeabur 服务或第二个公网端口。数据库、书籍图片、缩略图、服务器备份和门锁文件都会保存在 `/data`，重新部署不会丢失；删除持久卷仍会删除数据。
+
 ## MCP配置
 
 ### Claude Code（stdio）
@@ -106,6 +131,7 @@ Streamable HTTP端点：`http://你的服务器:3001/mcp`
 | `COREAD_MCP_PORT` | `3001` | MCP SSE/HTTP服务器端口 |
 | `COREAD_MCP_HOST` | `127.0.0.1` | MCP SSE/HTTP服务器监听地址 |
 | `COREAD_DB` | `./data/coread.db` | 数据库路径 |
+| `COREAD_ACCESS_TOKEN` | 空（关闭） | 公网部署的网页登录钥匙与 MCP Bearer Token；Zeabur 部署必须设置 |
 | `COREAD_NOTIFY_CMD` | 空（关闭） | 有人评论时执行的shell命令，见下方「评论通知」 |
 | `COREAD_NOTIFY_FROM` | `human` | 触发通知的评论者名字，`*` 表示所有人 |
 | `ROOM_OWNER_KEY` | 空 | 关门锁的开门钥匙，见下方「关门锁」 |
