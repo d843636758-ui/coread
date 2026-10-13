@@ -55,8 +55,11 @@ test('OAuth discovery, DCR and PKCE authorization work end to end', async t => {
   });
   res = response();
   await handleOAuthRoute(request('POST', form.toString()), res, new URL('https://coread.test/oauth/authorize'), 'oauth-secret');
-  assert.equal(res.status, 303);
-  const callback = new URL(res.headers.Location);
+  assert.equal(res.status, 200);
+  assert.match(res.body, /钥匙正确，授权成功/);
+  assert.match(res.body, /返回 ChatGPT 完成连接/);
+  const callbackUrl = res.body.match(/<a class="button" href="([^"]+)"/)?.[1].replaceAll('&amp;', '&');
+  const callback = new URL(callbackUrl);
   assert.equal(callback.searchParams.get('state'), 'state-1');
   const code = callback.searchParams.get('code');
 
