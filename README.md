@@ -61,11 +61,14 @@ npm start       # 启动服务器
 | `ROOM_OWNER_KEY` | 另一段随机字符串 | 共读室关门锁的开门钥匙 |
 | `COREAD_DB` | `/data/coread.db` | 持久化数据库 |
 | `ROOM_LOCK_PATH` | `/data/reading-room-lock.json` | 持久化门锁状态 |
+| `COREAD_PUBLIC_URL` | `https://你的域名` | 可选；固定 OAuth 对外地址，Zeabur 通常可自动识别 |
 
 部署完成后：
 
 - 网页：打开 `https://你的域名/`，输入 `COREAD_ACCESS_TOKEN`；登录 Cookie 有效期 30 天。
-- MCP：连接 `https://你的域名/mcp`，认证方式选 Bearer Token，填写同一个 `COREAD_ACCESS_TOKEN`。
+- ChatGPT MCP：连接 `https://你的域名/mcp`，认证方式选 **OAuth**。浏览器会打开共读室授权页，在那里输入 `COREAD_ACCESS_TOKEN`。
+- 其他支持静态 Bearer 的 MCP 客户端仍可直接把 `COREAD_ACCESS_TOKEN` 作为 Bearer Token 使用。
+- ChatGPT 连接器会通过 OAuth 2.1 + PKCE 自动注册并取得 30 天访问令牌；不需要另建 OAuth 服务。
 - 兼容旧客户端的 SSE 地址仍是 `https://你的域名/sse`。
 - 健康检查地址是 `https://你的域名/healthz`，无需登录，但只返回服务是否正常。
 

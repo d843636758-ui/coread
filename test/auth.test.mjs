@@ -24,6 +24,7 @@ test('deployment auth accepts bearer and cookie, rejects unauthenticated APIs', 
   assert.equal(rejectUnauthorized({ method: 'POST', headers: {} }, res, new URL('https://coread.test/mcp')), true);
   assert.equal(res.status, 401);
   assert.match(res.headers['WWW-Authenticate'], /Bearer/);
+  assert.match(res.headers['WWW-Authenticate'], /oauth-protected-resource/);
 });
 
 test('login exchanges the access token for an HttpOnly cookie', async t => {

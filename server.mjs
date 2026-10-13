@@ -7,6 +7,7 @@ import { initDb, getDb } from './lib/db.mjs';
 import { handleRequest } from './lib/routes.mjs';
 import { createMcpHttpHandler } from './lib/mcp-http.mjs';
 import { getAccessToken, handleAuthRoute, isAuthorized, rejectUnauthorized } from './lib/auth.mjs';
+import { handleOAuthRoute } from './lib/oauth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || process.env.COREAD_PORT || '3000');
@@ -65,6 +66,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (await handleOAuthRoute(req, res, url, getAccessToken())) return;
   if (await handleAuthRoute(req, res, url)) return;
   if (rejectUnauthorized(req, res, url)) return;
 
@@ -104,6 +106,7 @@ server.listen(PORT, process.env.COREAD_HOST || '0.0.0.0', () => {
   console.log(`  📂 Database: ${DB_PATH}`);
   console.log(`  🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`  🔐 Access token: ${getAccessToken() ? 'enabled' : 'disabled (local/trusted networks only)'}`);
+  console.log(`  🔑 ChatGPT OAuth: ${getAccessToken() ? 'enabled' : 'disabled'}`);
   console.log(`  🌐 Open http://localhost:${PORT} in your browser\n`);
 });
 
