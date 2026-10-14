@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, startTransition, useLayoutEffect, useMemo } from 'react';
 import { api, BASE, ROOM_OWNER_KEY } from './api';
+import { LARGE_BOOK_THRESHOLD, loadBookSlices } from './book-loading.mjs';
 import { useReadingClock, flushReading } from './useReadingClock';
 import ReadingJournal, { duration } from './ReadingJournal';
 // BackupControls removed — inline backup controls from home version
@@ -218,13 +219,12 @@ function formatReadingTime(seconds: number): string {
 
 // 大书（对齐SullyOS共读室 v2.2.24）：不做窗口化——全局连续视觉分页。
 // 超阈值的书首开走渐进分页：分块测量（块间让出主线程不卡UI）+ 完成后写分页缓存，之后秒开。
-const PROGRESSIVE_MEASURE_THRESHOLD = 15000;
-const PARA_FETCH_CHUNK = 10000;
+const PROGRESSIVE_MEASURE_THRESHOLD = LARGE_BOOK_THRESHOLD;
 const MEASURE_CHUNK = 500;
 // 目录行高（窗口化渲染用，固定行高才能按滚动位置直接换算可视窗口）
 const TOC_ROW_H = 44;
 // 后手优化：缓存miss时先分当前位置±PROVISIONAL_WIN段立即可读，全书分页后台补全
-const PROVISIONAL_WIN = 2500;
+const PROVISIONAL_WIN = 800;
 
 // 分页/段落缓存主存 IndexedDB：大书分页结果几百KB起，localStorage(5-10MB)写不下
 // 或被清理→每次重开都重分页。localStorage 只作 IDB 不可用时的后手兜底。
@@ -1032,18 +1032,19 @@ const StudyApp: React.FC = () => {
             } catch {}
             if (!cacheHit) {
                 // 全书分块拉取：小书1块、大书多块（避免单次大响应内存峰值，也修掉9999段截断）；批注随块增量合并
-                const rawParas: Paragraph[] = [];
-                const fetchedComments: Comment[] = [];
-                const seenCommentIds = new Set<number>();
-                for (let start = 0; start < totalParas; start += PARA_FETCH_CHUNK) {
-                    const d = await api.fetchBookSlice(book.id, start, PARA_FETCH_CHUNK);
-                    if (requestId !== openRequest.current) return;
-                    rawParas.push(...(d.paragraphs || []));
-                    for (const cmt of (d.comments || []) as Comment[]) {
-                        if (!seenCommentIds.has(cmt.id)) { seenCommentIds.add(cmt.id); fetchedComments.push(cmt); }
-                    }
-                    if ((d.paragraphs || []).length < PARA_FETCH_CHUNK) break;
-                }
+                const loaded = await loadBookSlices({
+                    totalParas,
+                    fetchSlice: (start: number, count: number) => api.fetchBookSlice(book.id, start, count),
+                    onProgress: (progress: number) => {
+                        if (requestId === openRequest.current && totalParas > PROGRESSIVE_MEASURE_THRESHOLD) {
+                            // Reserve the first 15% for downloading; pagination continues from zero below.
+                            setPaginateProgress(progress * 0.15);
+                        }
+                    },
+                });
+                if (requestId !== openRequest.current) return;
+                const rawParas = loaded.paragraphs as Paragraph[];
+                const fetchedComments = loaded.comments as Comment[];
                 const isEpubJunk = (s: string) => /^(1UR057|Cover|封面|插图|导航|书名页|制作信息|Contents|[A-Z0-9]{3,10}(-\d+)?)$/.test(s.trim());
                 const allP: Paragraph[] = rawParas.filter((p: Paragraph) => !isEpubJunk(p.content));
                 // Hide TOC sections (目录 heading + consecutive chapter titles)
@@ -1244,7 +1245,7 @@ const StudyApp: React.FC = () => {
                 ? { idx: savedParaIdxRef.current, off: savedParaOffsetRef.current }
                 : anchorPosRef.current ?? { idx: currentParaIdxRef.current ?? allParas[0]?.idx ?? 0, off: 0 };
             const anchorPi0 = resolveAnchor(anchorPos0).pi;
-            const useProvisional = progressive && !suppressPageJumpRef.current && anchorPi0 > PROVISIONAL_WIN;
+            const useProvisional = progressive && !suppressPageJumpRef.current;
 
             // Try cache first（IndexedDB 主存；localStorage 里的旧缓存读出后迁移进IDB）
             if (paginationCacheKey) {
@@ -1395,7 +1396,7 @@ const StudyApp: React.FC = () => {
             // 后手优化：临时页只按段界切（不做段中切分），与最终页表允许有出入，很快会被全书分页替换
             let provisionalShown = false;
             if (useProvisional) {
-                const wFrom = anchorPi0 - PROVISIONAL_WIN;
+                const wFrom = Math.max(0, anchorPi0 - PROVISIONAL_WIN);
                 const wTo = Math.min(allParas.length, anchorPi0 + PROVISIONAL_WIN);
                 const wb: PageBreak[] = [{ paraIndex: wFrom, offset: 0 }];
                 let i = wFrom;
