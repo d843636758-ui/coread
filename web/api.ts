@@ -19,7 +19,15 @@ async function request(path: string, opts?: RequestInit) {
     headers: { 'Content-Type': 'application/json', 'x-owner-key': ROOM_OWNER_KEY },
     ...opts,
   });
-  if (!res.ok) throw Object.assign(new Error(`${res.status} ${res.statusText}`), { status: res.status });
+  if (!res.ok) {
+    const raw = await res.text().catch(() => '');
+    let detail = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      detail = parsed?.error || parsed?.message || raw;
+    } catch { /* plain-text response */ }
+    throw Object.assign(new Error(detail || `${res.status} ${res.statusText}`), { status: res.status });
+  }
   return res.json();
 }
 
