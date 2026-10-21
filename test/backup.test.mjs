@@ -6,7 +6,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { initDb, getDb, getImageDir } from '../lib/db.mjs';
 import { exportBackup, previewBackup, restoreBackup, validateBackup, MAX_BACKUP_BYTES } from '../lib/backup.mjs';
-import { handleBackupRequest } from '../lib/backup-routes.mjs';
+import { handleBackupRequest, handleStoredBackupRequest } from '../lib/backup-routes.mjs';
 
 test('backup round trip preserves reading data and images; failure rolls back; runtime config is excluded', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coread-backup-'));
@@ -36,6 +36,22 @@ test('backup round trip preserves reading data and images; failure rolls back; r
   const serialized = JSON.stringify(backup);
   assert.ok(!serialized.includes('test-secret-not-exportable'));
   assert.ok(!serialized.includes(dir));
+  const storedDir = path.join(dir, 'backups');
+  fs.mkdirSync(storedDir);
+  const storedName = 'coread-backup-2026-10-21T00-00-00-000Z.json';
+  fs.writeFileSync(path.join(storedDir, storedName), serialized);
+  const downloadReq = Readable.from([]);
+  downloadReq.method = 'GET';
+  downloadReq.url = `/v1/coread-backup/download?file=${storedName}`;
+  downloadReq.headers = { 'x-owner-key': 'owner' };
+  const downloadRes = {
+    writeHead(status, headers = {}) { this.status = status; this.headers = headers; },
+    end(body = '') { this.body = body; },
+  };
+  await handleStoredBackupRequest(downloadReq, downloadRes, 'owner');
+  assert.equal(downloadRes.status, 200);
+  assert.match(downloadRes.headers['Content-Disposition'], /attachment/);
+  assert.equal(String(downloadRes.body), serialized);
   assert.throws(() => restoreBackup('missing', true), /preview/);
   const preview = previewBackup(backup);
   assert.throws(() => restoreBackup(preview.token, false), /confirmation/);
