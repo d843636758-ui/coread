@@ -922,13 +922,11 @@ const StudyApp: React.FC = () => {
         if (backupBusy) return;
         setBackupBusy(true);
         try {
-            const settings = {
-                'coread-font-size': localStorage.getItem('coread-font-size') || '',
-                'coread-brightness': localStorage.getItem('coread-brightness') || '',
-                'coread-night-mode': localStorage.getItem('coread-night-mode') || '',
-                'coread-reading-clock': localStorage.getItem('coread-reading-clock') || '',
-                'coread-tap-turn': localStorage.getItem('coread-tap-turn') || '',
-            };
+            const settings: Record<string, string> = {};
+            for (const key of ['coread-font-size', 'coread-brightness', 'coread-night-mode', 'coread-reading-clock', 'coread-tap-turn']) {
+                const value = localStorage.getItem(key);
+                if (value) settings[key] = value;
+            }
             const d = await api.backupExport(settings);
             toast(`已存到服务器（${(d.bytes / 1048576).toFixed(0)}MB），在「恢复备份」里能看到`);
         } catch (e: any) { toast(e.message || '导出失败'); }
