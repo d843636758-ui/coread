@@ -23,9 +23,16 @@ test('backup round trip preserves reading data and images; failure rolls back; r
   db.close();
   const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64');
   fs.writeFileSync(path.join(getImageDir(1), 'cover.png'), image);
-  const backup = exportBackup({ 'coread-font-size': '18', 'coread-night-mode': 'true' });
+  const backup = exportBackup({
+    'coread-font-size': '18',
+    'coread-night-mode': 'true',
+    'coread-reading-clock': '',
+    'coread-tap-turn': '',
+  });
   assert.equal(backup.counts.books, 1);
   assert.equal(backup.counts.readingSeconds, 123.75);
+  assert.equal(backup.settings['coread-reading-clock'], '');
+  assert.equal(backup.settings['coread-tap-turn'], '');
   const serialized = JSON.stringify(backup);
   assert.ok(!serialized.includes('test-secret-not-exportable'));
   assert.ok(!serialized.includes(dir));
