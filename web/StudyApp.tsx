@@ -3074,6 +3074,9 @@ const StudyApp: React.FC = () => {
                                                             style={{ flex: 1, minWidth: 0, fontSize: 12, color: INK, padding: '6px 0', cursor: 'pointer', overflowWrap: 'anywhere' }}>
                                                             {fmtBackupTime(f.mtime)} · {(f.bytes / 1048576).toFixed(0)}MB
                                                         </div>
+                                                        <a href={`${BASE}/v1/coread-backup/download?file=${encodeURIComponent(f.file)}`} download={f.file}
+                                                            onClick={e => e.stopPropagation()}
+                                                            style={{ flexShrink: 0, padding: '4px 6px', fontSize: 12, color: INK2, textDecoration: 'none' }}>下载</a>
                                                         <div onClick={async () => {
                                                             try { await api.backupDelete(f.file); } catch {}
                                                             setBackupFiles(prev => prev ? prev.filter(x => x.file !== f.file) : prev);
